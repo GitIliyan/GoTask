@@ -109,63 +109,6 @@ func ExtractNumberFromExpression(expression string) (int, error) {
 	}
 	return result, nil
 }
-func extractNumberFromExpression(expression string) (int, error) {
-	words := strings.Fields(expression)
-	var result int
-	operator := "plus"
-	var numberFound bool
-	for i := 0; i < len(words); i++ {
-		word := words[i]
-		// Attempt to convert the word to an integer
-		num, err := strconv.Atoi(word)
-		if err == nil {
-			// If conversion is successful, perform the operation with the number
-			switch operator {
-			case "plus":
-				result += num
-			case "minus":
-				result -= num
-			case "multiplied":
-				result *= num
-			case "divided":
-				if num != 0 {
-					result /= num
-				} else {
-					errMsg := "division by zero"
-					IncrementErrorFrequency(errMsg, "/extractNumber", expression)
-					return 0, fmt.Errorf("division by zero")
-				}
-			default:
-				errMsg := "unsupported operator"
-				IncrementErrorFrequency(errMsg, "/extractNumber", expression)
-				return 0, fmt.Errorf(errMsg)
-			}
-			// Update the operator for the next operation (if any)
-			if i+1 < len(words) {
-				nextOperator := words[i+1]
-				// Check if the next operator is valid
-				if _, err := strconv.Atoi(words[i+2]); err != nil {
-					errMsg := "expressions with invalid syntax"
-					IncrementErrorFrequency(errMsg, "/extractNumber", expression)
-					return 0, fmt.Errorf(errMsg)
-				}
-				operator = nextOperator
-				// Skip the next word (operator) in the loop
-				i++
-			}
-			numberFound = true
-		} else if numberFound {
-			// If a number has been found previously, stop parsing further words
-			break
-		}
-	}
-	if !numberFound {
-		errMsg := "no number found in the expression"
-		IncrementErrorFrequency(errMsg, "/extractNumber", expression)
-		return 0, fmt.Errorf(errMsg)
-	}
-	return result, nil
-}
 
 func validateExpression(expression string) error {
 	words := strings.Fields(expression)
@@ -216,7 +159,7 @@ func handleRequest(w http.ResponseWriter, req *http.Request, validateOnly bool) 
 		response = "Expression is valid"
 	} else {
 		fmt.Println("not validate only")
-		number, err := extractNumberFromExpression(requestBody.Expression)
+		number, err := ExtractNumberFromExpression(requestBody.Expression)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return

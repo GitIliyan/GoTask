@@ -59,6 +59,112 @@ func getErrorFrequencies() []ErrorFrequency {
 
 var validOperators = []string{"plus", "minus", "multiplied", "divided"}
 
+func errorHandler(w http.ResponseWriter, err error, endpoint, expression string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusBadRequest)
+
+	// Increment error frequency count and update errorFrequencyMap
+	incrementErrorFrequency(err.Error(), endpoint, expression)
+
+	// Generate JSON response with error details
+	errorResponse := ErrorFrequency{
+		Expression: expression,
+		Endpoint:   endpoint,
+		Frequency:  errorFrequencyMap[err.Error()].Frequency,
+		Type:       err.Error(),
+	}
+
+	// Marshal error response to JSON
+	errorJSON, _ := json.Marshal(errorResponse)
+
+	// Write JSON response
+	_, _ = w.Write(errorJSON)
+}
+
+func getErrorFrequenciesHandler(w http.ResponseWriter, req *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	// Get error frequencies
+	errorFrequencies := getErrorFrequencies()
+
+	// Marshal error frequencies to JSON
+	errorJSON, err := json.Marshal(errorFrequencies)
+	if err != nil {
+		errorHandler(w, err, "N/A", "N/A")
+		return
+	}
+
+	// Write JSON response
+	_, _ = w.Write(errorJSON)
+}
+
+func isValidOperator(word string) bool {
+	for _, op := range validOperators {
+		if op == word {
+			return true
+		}
+	}
+	return false
+}
+func ExtractNumberFromExpression(expression string) (int, error) {
+	words := strings.Fields(expression)
+	var result int
+	operator := "plus"
+	var numberFound bool
+	for i := 0; i < len(words); i++ {
+		word := words[i]
+		// Attempt to convert the word to an integer
+		num, err := strconv.Atoi(word)
+		if err == nil {
+			// If conversion is successful, perform the operation with the number
+			switch operator {
+			case "plus":
+				result += num
+			case "minus":
+				result -= num
+			case "multiplied":
+				result *= num
+			case "divided":
+				if num != 0 {
+					result /= num
+				} else {
+					errMsg := "division by zero"
+					incrementErrorFrequency(errMsg, "/extractNumber", expression)
+					return 0, fmt.Errorf("division by zero")
+				}
+			default:
+				errMsg := "unsupported operator"
+				incrementErrorFrequency(errMsg, "/extractNumber", expression)
+				return 0, fmt.Errorf(errMsg)
+			}
+			// Update the operator for the next operation (if any)
+			if i+1 < len(words) {
+				nextOperator := words[i+1]
+				// Check if the next operator is valid
+				if _, err := strconv.Atoi(words[i+2]); err != nil {
+					errMsg := "expressions with invalid syntax"
+					incrementErrorFrequency(errMsg, "/extractNumber", expression)
+					return 0, fmt.Errorf(errMsg)
+				}
+				operator = nextOperator
+				// Skip the next word (operator) in the loop
+				i++
+			}
+			// Set numberFound flag to true
+			numberFound = true
+		} else if numberFound {
+			// If a number has been found previously, stop parsing further words
+			break
+		}
+	}
+	// If no number is found, return error
+	if !numberFound {
+		errMsg := "no number found in the expression"
+		incrementErrorFrequency(errMsg, "/extractNumber", expression)
+		return 0, fmt.Errorf(errMsg)
+	}
+	return result, nil
+}
 func extractNumberFromExpression(expression string) (int, error) {
 	words := strings.Fields(expression)
 	var result int
@@ -118,56 +224,7 @@ func extractNumberFromExpression(expression string) (int, error) {
 	}
 	return result, nil
 }
-func errorHandler(w http.ResponseWriter, err error, endpoint, expression string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusBadRequest)
 
-	// Increment error frequency count and update errorFrequencyMap
-	incrementErrorFrequency(err.Error(), endpoint, expression)
-
-	// Generate JSON response with error details
-	errorResponse := ErrorFrequency{
-		Expression: expression,
-		Endpoint:   endpoint,
-		Frequency:  errorFrequencyMap[err.Error()].Frequency,
-		Type:       err.Error(),
-	}
-
-	// Marshal error response to JSON
-	errorJSON, _ := json.Marshal(errorResponse)
-
-	// Write JSON response
-	_, _ = w.Write(errorJSON)
-}
-
-func getErrorFrequenciesHandler(w http.ResponseWriter, req *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
-	// Get error frequencies
-	errorFrequencies := getErrorFrequencies()
-
-	// Marshal error frequencies to JSON
-	errorJSON, err := json.Marshal(errorFrequencies)
-	if err != nil {
-		errorHandler(w, err, "N/A", "N/A")
-		return
-	}
-
-	// Write JSON response
-	_, _ = w.Write(errorJSON)
-}
-
-// isValidOperator checks if the given word is a valid operator.
-func isValidOperator(word string) bool {
-	for _, op := range validOperators {
-		if op == word {
-			return true
-		}
-	}
-	return false
-}
-
-// validateExpression validates the syntax of the given expression.
 func validateExpression(expression string) error {
 	// Split the expression into words
 	words := strings.Fields(expression)
@@ -251,12 +308,10 @@ func handleRequest(w http.ResponseWriter, req *http.Request, validateOnly bool) 
 	w.Write(responseJSON)
 }
 
-// extractHandler handles POST requests for extracting numbers from expressions.
 func extractHandler(w http.ResponseWriter, req *http.Request) {
 	handleRequest(w, req, false)
 }
 
-// validateHandler handles POST requests for validating expression syntax.
 func validateHandler(w http.ResponseWriter, req *http.Request) {
 	handleRequest(w, req, true)
 }
